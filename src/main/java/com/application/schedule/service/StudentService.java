@@ -1,5 +1,7 @@
 package com.application.schedule.service;
 
+import com.application.schedule.exception.EmailAlreadyExistException;
+import com.application.schedule.exception.StudentNotFoundException;
 import com.application.schedule.model.Group;
 import com.application.schedule.model.Student;
 import com.application.schedule.repository.GroupRepo;
@@ -13,20 +15,24 @@ import java.util.Optional;
 public class StudentService {
 
     private final StudentRepo studentRepo;
-    private final GroupRepo groupRepo;
+    private final GroupService groupService;
 
-    public StudentService(StudentRepo studentRepo, GroupRepo groupRepo) {
+    public StudentService(StudentRepo studentRepo, GroupService groupService) {
         this.studentRepo = studentRepo;
-        this.groupRepo = groupRepo;
+        this.groupService = groupService;
     }
 
     public List<Student> findAllStudent() {
         return studentRepo.findAll();
     }
 
-    public void addStudent(Student student) {
-        if (findStudentByEmail(student.getEmail()) == null)
+    public void addStudent(Student student) throws EmailAlreadyExistException{
+        try {
+            Student studentDB = findStudentByEmail(student.getEmail());
+            throw new EmailAlreadyExistException("Email already exist: " + student.getEmail());
+        } catch (StudentNotFoundException e) {
             studentRepo.save(student);
+        }
     }
 
     public List<Student> findAllByGroupId(Long groupId) {
@@ -43,9 +49,11 @@ public class StudentService {
             if (firstName != null) studentRepo.updateFirstNameById(id, firstName);
             if (lastName != null) studentRepo.updateLastNameById(id, lastName);
             if (email != null) {
-                Student otherStudent = findStudentByEmail(email);
-                if (otherStudent == null)
+                try {
+                    Student otherStudent = findStudentByEmail(email);
+                } catch (StudentNotFoundException e) {
                     studentRepo.updateEmailById(id, email);
+                }
             }
             if (age != null) {
                 if (age <= 70 && age >= 16)
@@ -55,21 +63,23 @@ public class StudentService {
     }
 
     public void changeGroup(Long studentId, Long groupId){
-        Optional<Group> group = groupRepo.findById(groupId);
+        Group group = groupService.findById(groupId);
         Student student = findStudentById(studentId);
-        if (group.isPresent() && !group.get().getStudents().contains(student))
-            studentRepo.updateGroupById(studentId, group.get());
+        if (!group.getStudents().contains(student))
+            studentRepo.updateGroupById(studentId, group);
     }
 
     public void deleteStudentById(Long studentId) {
         studentRepo.deleteById(studentId);
     }
 
-    public Student findStudentById(Long studentId) {
-        return studentRepo.findById(studentId).orElse(null);
+    public Student findStudentById(Long studentId) throws StudentNotFoundException{
+        return studentRepo.findById(studentId).orElseThrow(() ->
+                new StudentNotFoundException("Student not found by id: " + studentId));
     }
 
-    public Student findStudentByEmail(String email) {
-        return studentRepo.findByEmail(email).orElse(null);
+    public Student findStudentByEmail(String email) throws StudentNotFoundException{
+        return studentRepo.findByEmail(email).orElseThrow(() ->
+                new StudentNotFoundException("Student not found by email: " + email));
     }
 }
